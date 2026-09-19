@@ -66,6 +66,11 @@ def main():
                     help='source page is portrait with sideways content')
     ap.add_argument('--groups-json', default=None,
                     help='optional JSON file: [[box,cx,cy,maxw,maxh],...] overriding the default layout')
+    ap.add_argument('--bg', default=None, help='background png override')
+    ap.add_argument('--global-fit', default=None,
+                    help='JSON [srcx0,srcy0,srcx1,srcy1,dstx0,dsty0,dstx1,dsty1]: '
+                         'place every group through one shared transform (source-faithful '
+                         'layout; overlapping groups self-align)')
     ap.add_argument('--check-only', action='store_true')
     args = ap.parse_args()
 
@@ -73,7 +78,10 @@ def main():
     if args.groups_json:
         import json
         raw = json.load(open(args.groups_json))
-        groups = [(tuple(g[0]), tuple(g[1]), g[2], g[3]) for g in raw]
+        if args.global_fit:
+            groups = [(((g[0] if isinstance(g[0], list) else g)[:4]), None, None, None) for g in raw]
+        else:
+            groups = [(tuple(g[0]), tuple(g[1]), g[2], g[3]) for g in raw]
 
     if args.check_only:
         boxes = measure_groups(args.src, args.set_rot_270)
@@ -93,7 +101,8 @@ def main():
     out = fitz.open()
     p = out.new_page(width=sp.mediabox.width, height=sp.mediabox.height)
     p.set_cropbox(sp.cropbox); p.set_rotation(sp.rotation)
-    p.insert_image(p.cropbox, filename=str(WORK / 'zcode_v10_background.png'),
+    bg = args.bg or str(WORK / 'zcode_v10_background.png')
+    p.insert_image(p.cropbox, filename=bg,
                    keep_proportion=False, overlay=False)
 
     source_svg = sp.get_svg_image(matrix=fitz.Matrix(1, 1), text_as_path=True)
@@ -101,8 +110,18 @@ def main():
     source_svg = (source_svg.replace('#000000', '#0642a8')
                             .replace('#00ffff', '#e6a21a')
                             .replace('#808080', '#6f9bcf'))
-    for box, c, mw, mh in groups:
-        show_component(p, source_svg, box, place(box, c, mw, mh))
+    if args.global_fit:
+        import json as _json
+        gx0, gy0, gx1, gy1, dx0, dy0, dx1, dy1 = _json.loads(args.global_fit)
+        s = min((dx1-dx0)/(gx1-gx0), (dy1-dy0)/(gy1-gy0))
+        ox, oy = dx0, dy0
+        for box, c, mw, mh in groups:
+            px0 = ox + (box[0]-gx0)*s; py0 = oy + (box[1]-gy0)*s
+            px1 = ox + (box[2]-gx0)*s; py1 = ox*0 + oy + (box[3]-gy0)*s
+            show_component(p, source_svg, box, (px0, py0, px1, py1))
+    else:
+        for box, c, mw, mh in groups:
+            show_component(p, source_svg, box, place(box, c, mw, mh))
 
     title_display = fitz.Rect(400, 450, 820, 564)
     p.insert_image(title_display * p.derotation_matrix, filename=str(title_png),

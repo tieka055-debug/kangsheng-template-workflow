@@ -90,7 +90,7 @@ def make_titleblock_v21(model='BC-21系列塑高2.25mm'):
             break
     im.save(TITLE)
 
-def make_layout_background(display_w=841.89,display_h=595.276,S=3):
+def make_layout_background(display_w=841.89,display_h=595.276,S=3,rev_table=True,out_path=None):
     W,H=round(display_w*S),round(display_h*S)
     im=Image.open(PLATE).convert('RGB').resize((W,H),Image.Resampling.LANCZOS).convert('RGBA')
     P=lambda pts:[(round(x*S),round(y*S)) for x,y in pts]
@@ -119,14 +119,15 @@ def make_layout_background(display_w=841.89,display_h=595.276,S=3):
         line((15,y,22,y));line((820,y,827,y))
     for letter,y in zip('ABCDE',[(main_y[i]+main_y[i+1])/2 for i in range(5)]):
         txt(15.0,y,letter,10);txt(827.5,y,letter,10)
-    rx=[563.6,591.3,701.4,734.6,820.0];ry=[28.8,42.3,54.1,66.5]
-    rect((rx[0],ry[0],rx[-1],ry[-1]))
-    for x in rx[1:-1]:line((x,ry[0],x,ry[-1]))
-    for y in ry[1:-1]:line((rx[0],y,rx[-1],y))
-    txt(577.4,35.5,'REV.',7.2);txt(646.3,35.5,'DESCRIPTION',7.0)
-    txt(718.0,35.5,'DRAW.',7.0);txt(777.3,35.5,'DATE.',7.0)
+    if rev_table:
+        rx=[563.6,591.3,701.4,734.6,820.0];ry=[28.8,42.3,54.1,66.5]
+        rect((rx[0],ry[0],rx[-1],ry[-1]))
+        for x in rx[1:-1]:line((x,ry[0],x,ry[-1]))
+        for y in ry[1:-1]:line((rx[0],y,rx[-1],y))
+        txt(577.4,35.5,'REV.',7.2);txt(646.3,35.5,'DESCRIPTION',7.0)
+        txt(718.0,35.5,'DRAW.',7.0);txt(777.3,35.5,'DATE.',7.0)
     out=im.convert('RGB').rotate(-90,expand=True)
-    out.save(BG,quality=95,optimize=True)
+    out.save(out_path or BG,quality=95,optimize=True)
     return im.convert('RGB')
 
 def show_component(dst,source_svg,src_display,dst_display):

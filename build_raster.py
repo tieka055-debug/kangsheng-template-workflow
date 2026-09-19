@@ -8,7 +8,7 @@ from pathlib import Path
 import json, re, sys
 import fitz
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parent.parent
 WORK = ROOT / 'work'
@@ -47,12 +47,15 @@ def union_rect(rects, pad=8, clip=None):
         x1 = min(x1, clip[2]); y1 = min(y1, clip[3])
     return x0, y0, x1, y1
 
-def build_raster(src_path, out_pdf, model, title_png, plate_png, dpi=300):
+def build_raster(src_path, out_pdf, model, title_png, plate_png, dpi=300,
+                 content_bottom=None, win=None):
     src = fitz.open(src_path); page = src[0]
     if page.mediabox.height > page.mediabox.width and page.rotation == 0:
         page.set_rotation(270)
     M = page.rotation_matrix
     disp = page.rect                      # 842x595 display
+    if content_bottom is None: content_bottom = disp.height - SRC_INSET
+    if win is None: win = WIN
 
     # --- 1. 300 DPI 渲染整页（横版显示方向） ---
     pix = page.get_pixmap(dpi=dpi)
@@ -79,10 +82,10 @@ def build_raster(src_path, out_pdf, model, title_png, plate_png, dpi=300):
     # --- 3. 覆盖区域映射到内容窗口坐标，并用底图同位置像素无缝覆盖 ---
     win_x0, win_y0, win_x1, win_y1 = WIN
     win_w, win_h = win_x1 - win_x0, win_y1 - win_y0
-    # 内容裁剪：源页去掉四周边距
+    # 内容裁剪：源页去掉四周边距，底部截至 content_bottom（避开旧标题栏）
     crop_px = full.crop((int(src_inset * sc), int(src_inset * sc),
                          int((disp.width - src_inset) * sc),
-                         int((disp.height - src_inset) * sc)))
+                         int(content_bottom * sc)))
     # 覆盖：在 crop 像素上贴底图对应区域
     plate = Image.open(plate_png).convert('RGB')
     plate_full = plate.resize((int(disp.width * dpi / 72), int(disp.height * dpi / 72)),
@@ -100,17 +103,36 @@ def build_raster(src_path, out_pdf, model, title_png, plate_png, dpi=300):
         patch = plate_full.crop((ox0, oy0, ox0 + (px1 - px0), oy0 + (py1 - py0)))
         crop_px.paste(patch, (px0, py0))
 
-    # --- 4. 内容窗口放置（PDF pt） ---
+    # --- 4. 内容窗口放置（PDF pt），等比缩放进 win ---
     out = fitz.open()
     p = out.new_page(width=595.276, height=841.89)
     p.set_rotation(270)
     # 背景底图铺满
     p.insert_image(p.cropbox, filename=str(plate_png),
                    keep_proportion=False, overlay=False)
-    # 内容光栅放入窗口
+    # 内容光栅放入窗口（边缘羽化，融入底图）
+    ft = int(36 * dpi / 72)          # 上/左/右羽化
+    fb = max(2, int(3 * dpi / 72))   # 下边贴标题栏，只留微羽化
+    alpha = Image.new('L', crop_px.size, 255)
+    ad = ImageDraw.Draw(alpha)
+    for i in range(ft):
+        v = int(255 * i / ft)
+        ad.rectangle((i, i, crop_px.width-1-i, crop_px.height-1-i), outline=v)
+    for i in range(fb):
+        v = int(255 * i / fb)
+        ad.rectangle((i, crop_px.height-1-i, crop_px.width-1-i, crop_px.height-1-i), outline=v)
+    from PIL import ImageFilter as IF
+    alpha = alpha.filter(IF.GaussianBlur(ft/4))
+    crop_rgba = crop_px.convert('RGBA')
+    crop_rgba.putalpha(alpha)
     raster_png = WORK / '_raster_content.png'
-    crop_px.save(raster_png, optimize=True)
-    win_rect = fitz.Rect(*WIN) * p.derotation_matrix
+    crop_rgba.save(raster_png, optimize=True)
+    src_w = disp.width - 2*src_inset
+    src_h = content_bottom - src_inset
+    s = min((win[2]-win[0])/src_w, (win[3]-win[1])/src_h)
+    pw, ph = src_w*s, src_h*s
+    wcx, wcy = (win[0]+win[2])/2, (win[1]+win[3])/2
+    win_rect = fitz.Rect(wcx-pw/2, wcy-ph/2, wcx+pw/2, wcy+ph/2) * p.derotation_matrix
     p.insert_image(win_rect, filename=str(raster_png),
                    keep_proportion=False, overlay=True, rotate=270)
     # 图框 + 分区 + REV 表（与模板一致，矢量重绘）
