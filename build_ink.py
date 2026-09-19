@@ -158,17 +158,15 @@ def build_ink(src_path, out_pdf, model, title_png, plate_png, dpi=300):
     alpha = np.clip((255.0 - mn) / 255.0, 0, 1)
     alpha = np.where(lum > 234, 0, alpha)
 
-    # 墨色：灰阶→品牌蓝；青色系→金；其余彩色→原色
+    # 墨色：双色调（认可版标准）——灰阶与绿色图层 → 品牌蓝；
+    # 红/品红/黄/青等彩色图层 → 金色。不再保留源图原色。
     colored = sat > 45
-    cyanish = colored & (b > 120) & (g > 120) & (r < 0.6 * mx)
+    greenish = colored & (g > 0.6 * mx) & (r < 0.6 * mx) & (b < 0.6 * mx)
+    gold_mask = colored & ~greenish
     ink = np.zeros_like(full)
     ink[..., :] = BLUE[None, None, :]
-    gold_mask = cyanish
     for ch in range(3):
         ink[..., ch][gold_mask] = GOLD[ch]
-    keep = colored & ~cyanish
-    for ch in range(3):
-        ink[..., ch][keep] = full[..., ch][keep]
 
     # 透明化：旧图框/分区（内框以外全部，含框线、分区数字/刻度、
     # 旧标题栏伸进框带的部分）+ 旧标题栏 + 水印
