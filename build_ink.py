@@ -158,11 +158,12 @@ def build_ink(src_path, out_pdf, model, title_png, plate_png, dpi=300):
     alpha = np.clip((255.0 - mn) / 255.0, 0, 1)
     alpha = np.where(lum > 234, 0, alpha)
 
-    # 墨色：双色调（认可版标准）——灰阶与绿色图层 → 品牌蓝；
-    # 红/品红/黄/青等彩色图层 → 金色。不再保留源图原色。
+    # 墨色：双色调（认可版标准）——灰阶、绿、蓝(含CAD蓝底稿) → 品牌蓝；
+    # 红/品红/黄/青 → 金色。不再保留源图原色。
     colored = sat > 45
     greenish = colored & (g > 0.6 * mx) & (r < 0.6 * mx) & (b < 0.6 * mx)
-    gold_mask = colored & ~greenish
+    bluish = colored & (b > 0.6 * mx) & (r < 0.6 * mx) & (g < 0.6 * mx)
+    gold_mask = colored & ~greenish & ~bluish
     ink = np.zeros_like(full)
     ink[..., :] = BLUE[None, None, :]
     for ch in range(3):
@@ -187,40 +188,72 @@ def build_ink(src_path, out_pdf, model, title_png, plate_png, dpi=300):
     alpha[zero] = 0
     alpha[alpha < 0.30] = 0   # 淡残迹（虚线内框/分区数字 antialias）一并清除
 
-    # 整页 1:1 原位合成：不裁剪、不缩放、不重排，墨水层按原坐标叠加
-    ink_img = Image.fromarray(
-        np.dstack([ink.astype('uint8'),
-                   (alpha * 255).astype('uint8')]), 'RGBA')
+    # 大画幅源图（CAD 按 1:1 导出，页面远大于 A4）：
+    # 裁出内容包围盒，等比缩到 (750×400)pt 以内，在图框内水平居中放置
+    oversized = disp.width > 1200 or disp.height > 900
+    A4W, A4H = int(841.89 * S), int(595.276 * S)
+    if oversized:
+        ys, xs = np.where(alpha > 0.3)
+        bx0 = max(int(xs.min() - 20 * S), 0)
+        bx1 = min(int(xs.max() + 20 * S), Wd)
+        by0 = max(int(ys.min() - 20 * S), 0)
+        by1 = min(int(ys.max() + 20 * S), H)
+        cw, chh = bx1 - bx0, by1 - by0
+        s = min((750 * S) / cw, (400 * S) / chh, 1.0)
+        nw, nh = int(cw * s), int(chh * s)
+        print(f'  oversized page {disp.width:.0f}x{disp.height:.0f}pt: fit scale {s:.3f}')
+        layer = Image.fromarray(
+            np.dstack([ink[by0:by1, bx0:bx1].astype('uint8'),
+                       (alpha[by0:by1, bx0:bx1] * 255).astype('uint8')]), 'RGBA'
+        ).resize((nw, nh), Image.LANCZOS)
+        px = (A4W - nw) // 2
+        py = int(45 * S) + max(int((400 * S) - nh) // 2, 0)
+        rev_table = True
+        placed_alpha = np.zeros((A4H, A4W), dtype=float)
+        placed_alpha[py:py + nh, px:px + nw] = np.asarray(layer)[..., 3] / 255.0
+    else:
+        layer = None
+        px = py = 0
+        placed_alpha = alpha
 
     # REV 表碰撞检测：右上角格子区(563.6, 28.8)-(820, 66.5)内有墨迹
     # → 布局紧张，去掉格子；干净 → 照常保留
     rx0, ry0, rx1, ry1 = 563.6, 28.8, 820.0, 66.5
-    reg = alpha[int(ry0 * S):int(ry1 * S), int(rx0 * S):int(rx1 * S)]
+    reg = placed_alpha[int(ry0 * S):int(ry1 * S), int(rx0 * S):int(rx1 * S)]
     rev_table = bool((reg > 0.25).sum() < 150)
 
-    # 避让微缩：整页等比、锚定页面原点，仅在内容放不下时按最紧约束微缩
+    # 避让微缩（仅 A4 正常路径）：整页等比、锚定页面原点，仅在内容放不下时按最紧约束微缩
     #   1) 标题栏区(400,450)-(820,564)比旧标题栏高 → 该 x 带内容须让至 448pt
     #   2) 品牌图框 (22,29,820,564) → 内容整体须收进 562/818pt 以内
     s = 1.0
-    band = alpha[:, int(400 * S):int(820 * S)] > 0.25
-    bys = np.where(band.any(axis=1))[0]
-    if len(bys) and bys.max() >= int(448 * S):
-        s = min(s, (448 * S) / (bys.max() + 1))
-    ays = np.where((alpha > 0.25).any(axis=1))[0]
-    if len(ays) and ays.max() >= int(562 * S):
-        s = min(s, (562 * S) / (ays.max() + 1))
-    axs = np.where((alpha > 0.25).any(axis=0))[0]
-    if len(axs) and axs.max() >= int(818 * S):
-        s = min(s, (818 * S) / (axs.max() + 1))
-    s = min(1.0, s)
-    if s < 0.995:
-        ink_img = ink_img.resize((int(Wd * s), int(H * s)), Image.LANCZOS)
-        print(f'  clearance: uniform scale {s:.3f}')
+    if oversized:
+        ink_img = layer
+        clearance = None
+    else:
+        band = alpha[:, int(400 * S):int(820 * S)] > 0.25
+        bys = np.where(band.any(axis=1))[0]
+        if len(bys) and bys.max() >= int(448 * S):
+            s = min(s, (448 * S) / (bys.max() + 1))
+        ays = np.where((alpha > 0.25).any(axis=1))[0]
+        if len(ays) and ays.max() >= int(562 * S):
+            s = min(s, (562 * S) / (ays.max() + 1))
+        axs = np.where((alpha > 0.25).any(axis=0))[0]
+        if len(axs) and axs.max() >= int(818 * S):
+            s = min(s, (818 * S) / (axs.max() + 1))
+        s = min(1.0, s)
+        clearance = s
+        ink_img = Image.fromarray(
+            np.dstack([ink.astype('uint8'),
+                       (alpha * 255).astype('uint8')]), 'RGBA')
+        if s < 0.995:
+            ink_img = ink_img.resize((int(Wd * s), int(H * s)), Image.LANCZOS)
+            print(f'  clearance: uniform scale {s:.3f}')
 
     # 合成：底图铺满 + 墨水层（原位叠加，左上角对齐页面原点）
     plate = Image.open(plate_png).convert('RGB')
-    plate_rgba = plate.resize((Wd, H), Image.LANCZOS).convert('RGBA')
-    plate_rgba.alpha_composite(ink_img, (0, 0))
+    canvas_w, canvas_h = (A4W, A4H) if oversized else (Wd, H)
+    plate_rgba = plate.resize((canvas_w, canvas_h), Image.LANCZOS).convert('RGBA')
+    plate_rgba.alpha_composite(ink_img, (px, py) if oversized else (0, 0))
     composite_png = W / '_ink_composite.png'
     plate_rgba.convert('RGB').save(composite_png, optimize=True)
 

@@ -64,13 +64,18 @@ def is_branded(src_pdf):
     try:
         d = fitz.open(src_pdf)
         p = d[0]
-        zone = fitz.Rect(400, 450, 820, 564) * p.derotation_matrix
+        zone_d = fitz.Rect(400, 450, 820, 564)
+        zone_m = zone_d * p.derotation_matrix   # mediabox 空间
         for img in p.get_image_info():
-            b = img['bbox']
-            r = fitz.Rect(b) * p.derotation_matrix if p.rotation_matrix else fitz.Rect(b)
-            inter = r & zone
-            if not inter.is_empty and inter.width * inter.height > 15000:
-                d.close()
+            r = fitz.Rect(img['bbox'])
+            r_area = max(r.width * r.height, 1.0)
+            if r_area < 15000:
+                continue
+            # 标题栏图片：基本完整落在标题栏区内（整页扫描图不算）
+            for zone in (zone_d, zone_m):
+                inter = r & zone
+                if not inter.is_empty and inter.width * inter.height > 0.9 * r_area:
+                    d.close()
                 return True
         d.close()
     except Exception:
