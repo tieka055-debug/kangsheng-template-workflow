@@ -11,9 +11,11 @@ BC-21系列塑高2.25H、BC-21系列塑高1.7H、2D_BC-26系列 2-6P —— 就�
 ## 工作台
 - 工作目录：`/Users/vill/Documents/Codex/2026-09-17/referenced-chatgpt-conversation-this-is-an`
 - 飞书 Base `TxgTbNZV8aieOJsT21pcr9jXnPf`
-  - 产品表 `tblkasFvHs3hl91c`（**不许再动**，等用户验收后另行处理）
-  - 对照表 `tbl7kbUzvKU3QvvL`「原图对照-康生模版检查」：
-    列 = 内部型号 | 原图(供应商) | 康生版 | 检查状态
+  - 产品表 `tblkasFvHs3hl91c`（**只写「替换图纸」列 fldfi1Wnt8（附件类型），
+    绝不碰 2D图纸列 fldesr8bw9**——2D图纸列已恢复为供应商原图，是对照基准）
+  - 行序（视图顺序）：1-10=BC-21系列（已认可），11=BC-21沉板1.25，31=BC-26（已认可），
+    从 11 开始逐张做（跳过 31 和无 2D 图纸的行，如 12=PCB使用图示）
+  - 记录ID↔行对应：按创建顺序拉取（pim_records.ndjson 即视图顺序）
 - 冻结资产（work/）：`user_bg_plate.png`（背景底图）、`single_sample_titleblock.png`
   （标题栏母版）、`titleblock_factory.py`（只换图号值）
 - 核心脚本：`work/zcode_build_series.py`（矢量构建，--groups-json 传入分组布局）
@@ -33,7 +35,7 @@ BC-21系列塑高2.25H、BC-21系列塑高1.7H、2D_BC-26系列 2-6P —— 就�
    a. 渲染成品 PNG，与原图并排肉眼对比：每组内容都在、位置合理、无重叠、无缺失
    b. 连通域遗漏扫描（源图 vs 成品，除旧图框/水印外零遗漏）
    c. 字号检查：成品里的尺寸标注文字必须与原图等比、清晰
-7. **回传**：上传成品到对照表该行的「康生版」列，检查状态改「待用户验收」
+7. **回传**：上传成品到产品表该行「替换图纸」列（fldfi1Wnt8），不动其他列
 8. 汇报该行行号+图号，等用户确认后再做下一张（或用户说连续做则继续）
 
 ## 避坑清单（每条都是真实事故）
