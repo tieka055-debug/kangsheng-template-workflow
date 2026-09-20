@@ -1,3 +1,18 @@
+# 当前入口：康生图纸 Skill（2026-09-20）
+
+请先读 [skills/kangsheng-drawings/SKILL.md](skills/kangsheng-drawings/SKILL.md)。
+
+本次新增可移植 Skill、原图内容清单要求、独立验收流程及只读发布准备门禁。**旧构建器尚未修复，旧上传器未接入新门禁，既有成品未因此自动合格。** 不直接执行下方历史批量/上传命令。下一步是在隔离候选目录修复失败样板并验收。
+
+- 型号—尺寸参数表、BOM、性能说明、全部视图和尺寸必须保全。
+- 右上空修订表可让位，品牌母版不得覆盖各图的技术字段。
+- 门禁测试：`python3 -m unittest discover -s skills/kangsheng-drawings/tests -v`。
+- 门禁运行：`python3 skills/kangsheng-drawings/scripts/release_gate.py /absolute/path/manifest.json`。
+- 校验仅核查证据结构、页面映射和文件哈希，不替代人工/代理原图对照，不上传。
+- 安装时可将 `skills/kangsheng-drawings` 整个文件夹复制到目标智能体的 skills 目录；品牌资产仍须单独指定。
+
+## 以下为历史说明（仅用于追溯，不是当前操作入口）
+
 # 康生模版工作流
 
 把供应商原始 2D 图纸（PDF）批量转换为「康生电子」品牌样式的工程图纸，
