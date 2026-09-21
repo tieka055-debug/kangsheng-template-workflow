@@ -159,6 +159,51 @@ def draw_frame_and_title(page: fitz.Page, fields: dict, assets: dict) -> None:
         text(408, y, value, 7); y += 10
 
 
+def draw_structured_table(page: fitz.Page, table: dict) -> None:
+    """Draw verified cells instead of copying placeholder or polluted source furniture."""
+    box = fitz.Rect(table["target_box"])
+    cells = table["cells"]
+    if not cells or any(len(row) != len(cells[0]) for row in cells):
+        raise ValueError(f"invalid structured table cells: {table['id']}")
+    rows, columns = len(cells), len(cells[0])
+    widths = table.get("column_weights") or [1] * columns
+    if len(widths) != columns or any(float(value) <= 0 for value in widths):
+        raise ValueError(f"invalid structured table column_weights: {table['id']}")
+    total = sum(float(value) for value in widths)
+    xs = [box.x0]
+    for value in widths:
+        xs.append(xs[-1] + box.width * float(value) / total)
+    ys = [box.y0 + box.height * row / rows for row in range(rows + 1)]
+    page.draw_rect(box, color=BLUE, width=.8)
+    for x in xs[1:-1]:
+        page.draw_line((x, box.y0), (x, box.y1), color=BLUE, width=.65)
+    for y in ys[1:-1]:
+        page.draw_line((box.x0, y), (box.x1, y), color=BLUE, width=.65)
+    for row, values in enumerate(cells):
+        for column, value in enumerate(values):
+            rect = fitz.Rect(xs[column] + 2, ys[row] + 2, xs[column + 1] - 2, ys[row + 1] - 2)
+            size = float(table.get("font_size", 7.2))
+            value = str(value)
+            runs = []
+            for char in value:
+                font = "helv" if char.isascii() else "china-s"
+                if runs and runs[-1][0] == font:
+                    runs[-1] = (font, runs[-1][1] + char)
+                else:
+                    runs.append((font, char))
+            widths = [fitz.Font(fontname=font).text_length(text, fontsize=size) for font, text in runs]
+            total_width = sum(widths)
+            if total_width > rect.width:
+                size *= rect.width / total_width
+                widths = [fitz.Font(fontname=font).text_length(text, fontsize=size) for font, text in runs]
+                total_width = sum(widths)
+            x = rect.x0 + (rect.width - total_width) / 2
+            y = rect.y0 + (rect.height + size * .72) / 2
+            for (font, text), width in zip(runs, widths):
+                page.insert_text((x, y), text, fontname=font, fontsize=size, color=BLUE)
+                x += width
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("config", type=Path)
@@ -211,6 +256,18 @@ def main() -> int:
             "kind": group.get("kind", "view"), "source_box": list(src_rect),
             "target_box": list(dest), "scale": scale, "color_mode": mode,
             "inventory_ids": group.get("inventory_ids", []),
+        })
+
+    for table in cfg.get("structured_tables", []):
+        draw_structured_table(page, table)
+        src = fitz.Rect(table["src"])
+        target = fitz.Rect(table["target_box"])
+        placements.append({
+            "id": table["id"], "assembly": table.get("assembly", table["id"]),
+            "kind": "table", "source_box": list(src), "target_box": list(target),
+            "scale": 1.0, "color_mode": "structured",
+            "inventory_ids": table.get("inventory_ids", [table["id"]]),
+            "rows": len(table["cells"]), "columns": len(table["cells"][0]),
         })
 
     draw_frame_and_title(page, cfg["fields"], assets)
