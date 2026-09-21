@@ -105,6 +105,10 @@ def draw_frame_and_title(page: fitz.Page, fields: dict, assets: dict) -> None:
             x = bounds.x0 + (bounds.width - width) / 2
             y = bounds.y0 + (bounds.height + size * .72) / 2
             page.insert_text((x, y), value, fontname=font, fontsize=size, color=BLUE)
+            if fields.get("title_bold") and value == fields.get("title"):
+                # Built-in CJK fonts have no bold face. A very small second pass
+                # gives the title the same visual weight as the approved sample.
+                page.insert_text((x + .28, y), value, fontname=font, fontsize=size, color=BLUE)
             return
         result = page.insert_textbox(fitz.Rect(box), value, fontname=font, fontsize=size, color=BLUE, align=1)
         if result < 0:
