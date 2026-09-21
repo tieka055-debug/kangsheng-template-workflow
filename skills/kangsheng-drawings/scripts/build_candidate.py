@@ -91,6 +91,11 @@ def target_rect(group: dict) -> tuple[fitz.Rect, float]:
 
 
 def draw_frame_and_title(page: fitz.Page, fields: dict, assets: dict) -> None:
+    cjk_font_name = "china-s"
+    cjk_font_file = fields.get("cjk_font_file")
+    if cjk_font_file:
+        cjk_font_name = "ks-title-font"
+        page.insert_font(fontname=cjk_font_name, fontfile=str(Path(cjk_font_file).expanduser()))
     def line(a, b, width=.65):
         page.draw_line(fitz.Point(*a), fitz.Point(*b), color=BLUE, width=width)
     def rect(box, width=.65):
@@ -99,8 +104,10 @@ def draw_frame_and_title(page: fitz.Page, fields: dict, assets: dict) -> None:
         page.insert_text((x, y), value, fontname=font, fontsize=size, color=BLUE)
     def center(box, value, size=7, font="helv"):
         if font == "china-s":
+            font = cjk_font_name
             bounds = fitz.Rect(box)
-            font_obj = fitz.Font(fontname=font)
+            font_obj = (fitz.Font(fontfile=str(Path(cjk_font_file).expanduser()))
+                        if cjk_font_file and font == cjk_font_name else fitz.Font(fontname=font))
             width = font_obj.text_length(value, fontsize=size)
             x = bounds.x0 + (bounds.width - width) / 2
             y = bounds.y0 + (bounds.height + size * .72) / 2
@@ -115,6 +122,18 @@ def draw_frame_and_title(page: fitz.Page, fields: dict, assets: dict) -> None:
             raise ValueError(f"title text overflow: {value!r}")
     def center_mixed(box, value, size=9):
         bounds = fitz.Rect(box)
+        if cjk_font_file:
+            font_obj = fitz.Font(fontfile=str(Path(cjk_font_file).expanduser()))
+            width = font_obj.text_length(value, fontsize=size)
+            if width > bounds.width - 4:
+                size *= (bounds.width - 4) / width
+                width = font_obj.text_length(value, fontsize=size)
+            x = bounds.x0 + (bounds.width - width) / 2
+            y = bounds.y0 + (bounds.height + size * .72) / 2
+            page.insert_text((x, y), value, fontname=cjk_font_name, fontsize=size, color=BLUE)
+            if fields.get("model_bold"):
+                page.insert_text((x + .24, y), value, fontname=cjk_font_name, fontsize=size, color=BLUE)
+            return
         runs = []
         for char in value:
             font = "helv" if char.isascii() else "china-s"
