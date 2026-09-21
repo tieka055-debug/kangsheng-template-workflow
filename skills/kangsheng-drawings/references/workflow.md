@@ -33,9 +33,15 @@
 
 - inventory `groups[]`: `id`, `kind`, `region`；共享尺寸或投影关系用同一完整 region 或 assembly，禁止拆断。
 - table 组还需 `cells`、`target_width`、`row_height`，可选 `column_weights`。
-- `kind` 使用 view/isometric/performance/specification/pcb/table；类型只影响排版偏好，不允许删除内容。
+- `kind` 使用 view/isometric/performance/specification/pcb/table；performance 优先右上、PCB优先右下、紧凑表格优先左下。类型只影响排版偏好，不允许删除内容。
 - 可为性能、PCB等设置 `maximum_scale`；产品 view 仍使用求解器选出的统一比例。
 - Job 保存源文件、inventory、资产、输出、技术字段和质量阈值；不得包含飞书 token、记录 ID 或上传动作。
+
+## 颜色语义
+
+- 默认使用 `semantic_gold`：黑色技术线转品牌蓝，源图既有的非黑重点色转统一金色。
+- 重点色常用于针脚、接触片、焊盘或关键尺寸；只继承源图已有语义，不凭视觉喜好新增。
+- 白色和近白背景不得染色；输出需抽查蓝/金两色像素均存在（源图确有重点色时）。
 
 母版中的 3:1、默认公差、产品名称不是通用值。重排缩放须核实标注比例；多视图不同缩放时提出明确标注方案，交工程负责人确认，不擅自替换技术规范。
 

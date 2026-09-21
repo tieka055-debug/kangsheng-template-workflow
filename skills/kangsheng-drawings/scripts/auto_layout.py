@@ -75,7 +75,9 @@ def pack(items, canvas, gap, scale):
     placed = {}
     # Semantic anchors first; remaining views follow by decreasing area.
     order = sorted(items, key=lambda item: (
-        {"table": 0, "pcb": 1, "performance": 2, "specification": 2}.get(item["kind"], 3),
+        # Reserve the upper-right performance column first, matching approved
+        # drawings; then place the compact table and lower-right PCB region.
+        {"performance": 0, "specification": 0, "table": 1, "pcb": 2}.get(item["kind"], 3),
         -item["width"] * item["height"], item["order"]))
     for item in order:
         if item["kind"] == "table":

@@ -17,6 +17,7 @@ from pathlib import Path
 import pymupdf as fitz
 
 BLUE_HEX = "#0642a8"
+GOLD_HEX = "#d99a00"
 BLUE = (6 / 255, 66 / 255, 168 / 255)
 PAGE = (841.89, 595.276)
 FRAME = [22, 29, 820, 564]
@@ -47,6 +48,24 @@ def recolor(svg: str, mode: str) -> str:
         return svg
     if mode in {"black_to_blue", "keep_non_black"}:
         svg = re.sub(r"#000000\b|#000\b", BLUE_HEX, svg, flags=re.I)
+        svg = svg.replace("<svg ", f'<svg fill="{BLUE_HEX}" ', 1)
+        return svg
+    if mode == "semantic_gold":
+        # Technical black becomes brand blue. Existing semantic highlight colours
+        # (red/green/magenta/orange, used for pins and critical dimensions) become
+        # one approved gold. White and near-white page furniture remain untouched.
+        def replace(match):
+            value = match.group(0)
+            raw = value[1:]
+            if len(raw) == 3:
+                raw = "".join(char * 2 for char in raw)
+            red, green, blue = (int(raw[i:i + 2], 16) for i in (0, 2, 4))
+            if min(red, green, blue) >= 245:
+                return value
+            if max(red, green, blue) <= 45:
+                return BLUE_HEX
+            return GOLD_HEX
+        svg = re.sub(r"#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b", replace, svg)
         svg = svg.replace("<svg ", f'<svg fill="{BLUE_HEX}" ', 1)
         return svg
     if mode == "preserve":
