@@ -1,1 +1,7 @@
-__pycache__/
+*
+!.gitignore
+!README.md
+!AGENTS.md
+!skills/
+!skills/kangsheng-drawings/
+!skills/kangsheng-drawings/SKILL.md
